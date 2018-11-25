@@ -21,15 +21,15 @@ struct Lit {
   var_t var;
   bool sign;  // false = positive, true = negative
 
-  Lit negate() const {
+  inline Lit negate() const {
     return {var, !sign};
   }
 
-  bool eval(const Model &m) const {
+  inline bool eval(const Model &m) const {
     return sign ^ m.at(var);
   }
 
-  bool operator==(const Lit &other) const {
+  inline bool operator==(const Lit &other) const {
     return other.var == var && other.sign == sign;
   }
 };
@@ -40,9 +40,9 @@ struct Clause {
   Clause() {}
   Clause(const std::vector<Lit> &lts) : lits(lts) {}
 
-  size_t size() const { return lits.size(); }
+  inline size_t size() const { return lits.size(); }
 
-  bool eval(const Model &m) const {
+  inline bool eval(const Model &m) const {
     for (const auto &lit : lits)
       if (lit.eval(m))
         return true;
@@ -56,9 +56,9 @@ struct CNF {
 
   static CNF fromDIMACS(std::istream &os);
 
-  size_t size() const { return clauses.size(); }
+  inline size_t size() const { return clauses.size(); }
 
-  bool eval(const Model &m) const {
+  inline bool eval(const Model &m) const {
     for (const auto &clause : clauses)
       if (!clause.eval(m))
         return false;
@@ -86,14 +86,22 @@ class DPLLSolver : public Solver {
     std::pair<Lit*, Lit*> watched;
     // true if this clause is not sat under the current model, else false
     bool active;
+
+    inline bool empty() const {
+      return (watched.first == nullptr) && (watched.second == nullptr);
+    }
+
+    inline bool unital() const {
+      return (watched.first != nullptr) ^ (watched.second != nullptr);
+    }
   };
 
   // represents the solver state change occuring after a nondeterministic assignment
   struct _SolverDelta {
-    // the principal (nondeterministic) assignment associated with this delta
-    Lit principal;
     // the forced assignments associated with this delta
     std::list<Lit> forced;
+    // the principal (nondeterministic) assignment associated with this delta
+    Lit principal;
 
     // PRIOR _ClauseStates that were affected (due to principal & forced assignments)
     // this is used to restore the previous solver state when backtracking
@@ -122,11 +130,12 @@ class DPLLSolver : public Solver {
   // returns true and outputs an unassigned variable throught out if exists, false otherwise
   bool _chooseVar(var_t *out) const;
 
-  // assigns lit to be true and updates the model, deltas, and clause states accordingly
+  // decides lit to be true and updates the model, deltas, and clause states accordingly
   // nb: this represents a NONDETERMINISTIC assignment, i.e. not forced by previous assignments,
   //     hence it has an associated delta. Forced assignments are directly tied to the delta of
   //     a nondeterministic assignment. (Maybe this should be changed? don't think so.)
-  void _assign(const Lit &lit);
+  // returns true if no contradiction (i.e. empty clause) was created, else false
+  bool _decide(const Lit &lit);
 
   // returns true if var is assigned in the model, false otherwise
   bool _isAssigned(var_t var) const;
@@ -134,8 +143,10 @@ class DPLLSolver : public Solver {
   // finds an unassigned Lit in clause not equal to banned if banned is non-null, else no restriction
   Lit *_findUnassigned(Clause &clause, const Lit *banned) const;
 
-  // propagates lit (might make additional assignments), updates delta
-  void _unitPropagate(const Lit &lit, _SolverDelta *delta);
+  // propagates lit (might make additional assignments), updates delta, returns true if no contradictions
+  // (i.e. empty clauses) were generated, false otherwise.
+  // nb: propagation terminates upon encountering any empty clause
+  bool _unitPropagate(const Lit &lit, _SolverDelta *delta);
   // assigns pure and does the propagation, updates delta
   void _pureAssign(const Lit &pure, _SolverDelta *delta);
 

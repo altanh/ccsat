@@ -1,4 +1,3 @@
-#include <cassert>
 #include <algorithm>
 #include <iostream>
 #include <sstream>
@@ -78,23 +77,22 @@ void DPLLSolver::_init(const CNF &cnf) {
 
 bool DPLLSolver::_DPLL() {
   while (!_assn_stack.empty()) {
-    // make an assignment
-    _assign(_assn_stack.top());
+    // make a decision, immediately backtrack if it caused contradictions
+    bool consistent = _decide(_assn_stack.top());
     _assn_stack.pop();
+
+    if (!consistent) {
+      if (!_backtrack())
+        return false;
+
+      continue;
+    }
 
     // every clause is satisfied, we're done (and have a possibly partial model)
     if (_allInactive()) {
       _completeModel();
 
       return true;
-    }
-
-    if (_hasEmpty()) {
-      if (!_backtrack()) {
-        return false;
-      }
-
-      continue;
     }
 
     if (_complete()) {
@@ -115,8 +113,6 @@ bool DPLLSolver::_DPLL() {
       return false;
     }
 
-    assert(_model.count(var) == 0);
-
     _assn_stack.push({var, true});
     _assn_stack.push({var, false});
   }
@@ -132,11 +128,9 @@ bool DPLLSolver::_undo() {
 
   // undo assignments
   _model.erase(delta.principal.var);
-  assert(_model.count(delta.principal.var) == 0);
 
   for (const auto &lit : delta.forced) {
     _model.erase(lit.var);
-    assert(_model.count(lit.var) == 0);
   }
 
   // restore clause states
@@ -163,38 +157,33 @@ bool DPLLSolver::_backtrack() {
   return true;
 }
 
-void DPLLSolver::_assign(const Lit &lit) {
+bool DPLLSolver::_decide(const Lit &lit) {
   _deltas.emplace();
   _SolverDelta &delta = _deltas.top();
 
   delta.principal = lit;
-  assert(_model.count(lit.var) == 0);
   _model[lit.var] = !lit.sign;
 
-  _unitPropagate(lit, &delta);
-
-  if (_hasEmpty()) return;
+  if(!_unitPropagate(lit, &delta)) return false;
 
   Lit unit;
   while (_findUnit(&unit)) {
     delta.forced.push_back(unit);
-    assert(_model.count(unit.var) == 0);
     _model[unit.var] = !unit.sign;
-    _unitPropagate(unit, &delta);
-
-    if (_hasEmpty()) return;
+    if(!_unitPropagate(unit, &delta)) return false;
   }
 
   Lit pure;
   while (_findPure(&pure)) {
     delta.forced.push_back(pure);
-    assert(_model.count(pure.var) == 0);
     _model[pure.var] = !pure.sign;
     _pureAssign(pure, &delta);
   }
+
+  return true;
 }
 
-void DPLLSolver::_unitPropagate(const Lit &lit, _SolverDelta *delta) {
+bool DPLLSolver::_unitPropagate(const Lit &lit, _SolverDelta *delta) {
   // indices of clauses that contain lit and ~lit
   const std::vector<size_t> &pos_indices =
       lit.sign ? _neg_map[lit.var] : _pos_map[lit.var];
@@ -212,20 +201,23 @@ void DPLLSolver::_unitPropagate(const Lit &lit, _SolverDelta *delta) {
 
   Lit negated = lit.negate();
   for (auto i : neg_indices) {
-    delta->store(std::make_pair(i, _clause_states[i]));
+    _ClauseState &cstate = _clause_states[i];
+    if (cstate.active) {
+      delta->store(std::make_pair(i, cstate));
 
-    // update the watchlist
-    if (_clause_states[i].watched.first != nullptr
-        && *_clause_states[i].watched.first == negated) {
-      // find a unique unassigned literal to watch (might not exist)
-      _clause_states[i].watched.first = 
-          _findUnassigned(_instance.clauses[i], _clause_states[i].watched.second);
-    } else if (_clause_states[i].watched.second != nullptr && 
-        *_clause_states[i].watched.second == negated) {
-      _clause_states[i].watched.second =
-          _findUnassigned(_instance.clauses[i], _clause_states[i].watched.first);
+      // update the watchlist
+      if (cstate.watched.first != nullptr && *cstate.watched.first == negated) {
+        // find a unique unassigned literal to watch (might not exist)
+        cstate.watched.first = _findUnassigned(_instance.clauses[i], cstate.watched.second);
+      } else if (cstate.watched.second != nullptr && *cstate.watched.second == negated) {
+        cstate.watched.second = _findUnassigned(_instance.clauses[i], cstate.watched.first);
+      }
+
+      if (cstate.empty()) return false;
     }
   }
+
+  return true;
 }
 
 void DPLLSolver::_pureAssign(const Lit &pure, _SolverDelta *delta) {
@@ -244,16 +236,11 @@ void DPLLSolver::_pureAssign(const Lit &pure, _SolverDelta *delta) {
 
 bool DPLLSolver::_findUnit(Lit *out) {
   for (auto &cstate : _clause_states) {
-    if (cstate.active) {
-      if (cstate.watched.first == nullptr && cstate.watched.second != nullptr) {
-        *out = *cstate.watched.second;
-        return true;
-      }
+    if (cstate.active && cstate.unital()) {
+      *out = cstate.watched.first != nullptr ? 
+          *cstate.watched.first : *cstate.watched.second;
 
-      if (cstate.watched.first != nullptr && cstate.watched.second == nullptr) {
-        *out = *cstate.watched.first;
-        return true;
-      }
+      return true;
     }
   }
 
@@ -308,7 +295,7 @@ bool DPLLSolver::_findPure(Lit *out) {
 // falsities occur.
 bool DPLLSolver::_hasEmpty() const {
   for (const auto &cs : _clause_states)
-    if (cs.active && cs.watched.first == nullptr && cs.watched.second == nullptr)
+    if (cs.active && cs.empty())
       return true;
 
   return false;
