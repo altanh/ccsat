@@ -9,8 +9,8 @@
 #include <vector>
 #include <string>
 #include <stack>
+#include <deque>
 #include <list>
-#include <set>
 
 namespace ccsat {
 
@@ -74,6 +74,8 @@ class Solver {
 
   // returns the model solving the SAT instance on sat, otherwise undefined
   virtual Model getModel() const = 0;
+
+  virtual ~Solver() {}
 };
 
 class DPLLSolver : public Solver {
@@ -93,6 +95,10 @@ class DPLLSolver : public Solver {
 
     inline bool unital() const {
       return (watched.first != nullptr) ^ (watched.second != nullptr);
+    }
+
+    inline Lit* getUnit() {
+      return watched.first != nullptr ? watched.first : watched.second;
     }
   };
 
@@ -144,14 +150,16 @@ class DPLLSolver : public Solver {
   Lit *_findUnassigned(Clause &clause, const Lit *banned) const;
 
   // propagates lit (might make additional assignments), updates delta, returns true if no contradictions
-  // (i.e. empty clauses) were generated, false otherwise.
+  // (i.e. empty clauses) were generated, false otherwise. Additionally, pushes any newly generated unit
+  // clauses onto the unit stack.
   // nb: propagation terminates upon encountering any empty clause
   bool _unitPropagate(const Lit &lit, _SolverDelta *delta);
   // assigns pure and does the propagation, updates delta
   void _pureAssign(const Lit &pure, _SolverDelta *delta);
 
   // finds a unit clause in the current solver state, i.e. an active clause with 1 non-null watched literal.
-  // outputs a ptr to the literal in the clause through out and returns true, or returns false if none
+  // outputs a ptr to the literal in the clause through out and returns true, or returns false if none.
+  // uses the unit stack first.
   bool _findUnit(Lit *out);
   // finds a pure literal in the current solver state and outputs through out and returns true,
   // or returns false if none
@@ -185,6 +193,7 @@ class DPLLSolver : public Solver {
 
   std::stack<_SolverDelta> _deltas;
   std::stack<Lit> _assn_stack;
+  std::deque<Lit> _unit_stack;
 
   // x -> [i] s.t. x in C_i for each i in [i] (i indexes _instance.clauses)
   std::unordered_map<var_t, std::vector<size_t>> _pos_map;

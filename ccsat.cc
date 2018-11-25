@@ -23,19 +23,21 @@ int main(int argc, char **argv) {
 
   bench.close();
 
-  ccsat::DPLLSolver solver;
-  bool sat = solver.solve(cnf);
+  ccsat::Solver *solver = new ccsat::DPLLSolver();
+  bool sat = solver->solve(cnf);
 
   std::cout << (sat ? "sat" : "unsat") << std::endl;
   if (sat) {
-    std::cout << solver.getModel() << std::endl;
+    std::cout << solver->getModel() << std::endl;
 
-    if (cnf.eval(solver.getModel())) {
+    if (cnf.eval(solver->getModel())) {
       std::cout << "model validated" << std::endl;
     } else {
       std::cout << "invalid model" << std::endl;
     }
   }
+
+  delete solver;
 
   return 0;
 }

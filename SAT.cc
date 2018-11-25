@@ -32,6 +32,16 @@ Model DPLLSolver::getModel() const {
 void DPLLSolver::_init(const CNF &cnf) {
   _instance = cnf;
 
+  // clear any existing garbage
+  _model.clear();
+  _vars.clear();
+  _clause_states.clear();
+  _pos_map.clear();
+  _neg_map.clear();
+  _deltas = {};
+  _assn_stack = {};
+  _unit_stack = {};
+
   // build _vars
   for (const auto &clause : _instance.clauses)
     for (const auto &lit : clause.lits)
@@ -146,13 +156,14 @@ bool DPLLSolver::_backtrack() {
 
   // undo until we reach the matching delta
   while (!(_deltas.top().principal == _assn_stack.top().negate())) {
-    if (!_undo())
-      return false;
+    if (!_undo()) return false;
   }
 
   // then undo that as well
-  if (!_undo())
-    return false;
+  if (!_undo()) return false;
+
+  // the unit stack is garbage now too, clear
+  _unit_stack.clear();
 
   return true;
 }
@@ -214,6 +225,7 @@ bool DPLLSolver::_unitPropagate(const Lit &lit, _SolverDelta *delta) {
       }
 
       if (cstate.empty()) return false;
+      if (cstate.unital()) _unit_stack.push_back(*cstate.getUnit());
     }
   }
 
@@ -235,10 +247,16 @@ void DPLLSolver::_pureAssign(const Lit &pure, _SolverDelta *delta) {
 }
 
 bool DPLLSolver::_findUnit(Lit *out) {
+  if (!_unit_stack.empty()) {
+    *out = _unit_stack.back();
+    _unit_stack.pop_back();
+
+    return true;
+  }
+
   for (auto &cstate : _clause_states) {
     if (cstate.active && cstate.unital()) {
-      *out = cstate.watched.first != nullptr ? 
-          *cstate.watched.first : *cstate.watched.second;
+      *out = *cstate.getUnit();
 
       return true;
     }
