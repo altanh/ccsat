@@ -98,13 +98,6 @@ bool DPLLSolver::_DPLL() {
       continue;
     }
 
-    // every clause is satisfied, we're done (and have a possibly partial model)
-    if (_allInactive()) {
-      _completeModel();
-
-      return true;
-    }
-
     if (_complete()) {
       if (_instance.eval(_model))
         return true;
@@ -113,6 +106,13 @@ bool DPLLSolver::_DPLL() {
         return false;
 
       continue;
+    }
+
+    // every clause is satisfied, we're done (and have a possibly partial model)
+    if (_allInactive()) {
+      _completeModel();
+
+      return true;
     }
 
     // choose a variable and push its possible assignments
