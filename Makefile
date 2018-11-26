@@ -1,5 +1,5 @@
 CC=g++
-CPPFLAGS=-g -Os -Wall -std=c++14
+CPPFLAGS=-g -O3 -Wall -std=c++14
 
 all: ccsat
 
