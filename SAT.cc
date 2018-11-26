@@ -384,13 +384,8 @@ CNF CNF::fromDIMACS(std::istream &os) {
 
   std::string line;
   while (std::getline(os, line)) {
-    if (line.empty())
+    if (line.empty() || line[0] == 'c' || line[0] == 'p')
       continue;
-
-    if (line[0] == 'c' || line[0] == 'p') {
-      std::cout << line << std::endl;
-      continue;
-    }
 
     std::stringstream ss(line);
     int val;
