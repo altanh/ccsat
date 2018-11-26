@@ -54,7 +54,7 @@ void DPLLSolver::_init(const CNF &cnf) {
     watched.first = _findUnassigned(_instance.clauses[i], nullptr);
     watched.second = _findUnassigned(_instance.clauses[i], watched.first);
 
-    _clause_states.push_back({watched, true});
+    _clause_states.push_back({watched, true, false});
   }
 
   // build _pos_map, _neg_map
@@ -87,6 +87,10 @@ void DPLLSolver::_init(const CNF &cnf) {
 
 bool DPLLSolver::_DPLL() {
   while (!_assn_stack.empty()) {
+    // mark all clauses unmodified (state only used during decision propagation)
+    for (auto &cstate : _clause_states)
+      cstate.modified = false;
+
     // make a decision, immediately backtrack if it caused contradictions
     bool consistent = _decide(_assn_stack.top());
     _assn_stack.pop();
@@ -203,7 +207,7 @@ bool DPLLSolver::_unitPropagate(const Lit &lit, _SolverDelta *delta) {
 
   for (auto i : pos_indices) {
     if (_clause_states[i].active) {
-      delta->store(std::make_pair(i, _clause_states[i]));
+      _storeClause(std::make_pair(i, _clause_states[i]), delta);
 
       // mark inactive, satisfied under the model now
       _clause_states[i].active = false;
@@ -214,7 +218,7 @@ bool DPLLSolver::_unitPropagate(const Lit &lit, _SolverDelta *delta) {
   for (auto i : neg_indices) {
     _ClauseState &cstate = _clause_states[i];
     if (cstate.active) {
-      delta->store(std::make_pair(i, cstate));
+      _storeClause(std::make_pair(i, cstate), delta);
 
       // update the watchlist
       if (cstate.watched.first != nullptr && *cstate.watched.first == negated) {
@@ -239,7 +243,7 @@ void DPLLSolver::_pureAssign(const Lit &pure, _SolverDelta *delta) {
 
   for (auto i : indices) {
     if (_clause_states[i].active) {
-      delta->store(std::make_pair(i, _clause_states[i]));
+      _storeClause(std::make_pair(i, _clause_states[i]), delta);
 
       _clause_states[i].active = false;
     }
@@ -367,15 +371,13 @@ bool DPLLSolver::_chooseVar(var_t *out) const {
   return false;
 }
 
-void DPLLSolver::_SolverDelta::store(const std::pair<size_t, _ClauseState> &cspair) {
+void DPLLSolver::_storeClause(const std::pair<size_t, _ClauseState> &cspair, _SolverDelta *delta) {
   // we don't want to have multiple prior states, only the oldest one, since the 'newer'
   // states are actually forced from the initial assignment
-  if (!std::any_of(priors.begin(), priors.end(), 
-      [&cspair](const auto &state) {
-        return state.first == cspair.first;
-      })) {
-    // store the state
-    priors.push_back(cspair);
+  if (!_clause_states[cspair.first].modified) {
+    delta->priors.push_back(cspair);
+
+    _clause_states[cspair.first].modified = true;
   }
 }
 
@@ -384,6 +386,9 @@ CNF CNF::fromDIMACS(std::istream &os) {
 
   std::string line;
   while (std::getline(os, line)) {
+    if (line[0] == '%')
+      break;
+
     if (line.empty() || line[0] == 'c' || line[0] == 'p')
       continue;
 

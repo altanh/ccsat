@@ -89,6 +89,11 @@ class DPLLSolver : public Solver {
     // true if this clause is not sat under the current model, else false
     bool active;
 
+    // keeps track of whether or not the state has been modified
+    //  - false immediately after backtracking and before a decision
+    //  - true if this state was modified during a decision, false otherwise
+    bool modified;
+
     inline bool empty() const {
       return (watched.first == nullptr) && (watched.second == nullptr);
     }
@@ -112,11 +117,7 @@ class DPLLSolver : public Solver {
     // PRIOR _ClauseStates that were affected (due to principal & forced assignments)
     // this is used to restore the previous solver state when backtracking
     // size_t indexes into _clause_states
-    std::vector<std::pair<size_t, _ClauseState>> priors;
-
-    // safely stores cspair (i.e. does not store if already present, so as to preserve
-    // the oldest state)
-    void store(const std::pair<size_t, _ClauseState> &cspair);
+    std::deque<std::pair<size_t, _ClauseState>> priors;
   };
 
   // initializes the solver on the given CNF SAT instance
@@ -132,6 +133,10 @@ class DPLLSolver : public Solver {
 
   // backtracks appropriately w.r.t. the next assignment and returns true, or false if not possible
   bool _backtrack();
+
+  // safely stores cspair (i.e. does not store if already present, so as to preserve
+  // the oldest state)
+  void _storeClause(const std::pair<size_t, _ClauseState> &cspair, _SolverDelta *delta);
 
   // returns true and outputs an unassigned variable throught out if exists, false otherwise
   bool _chooseVar(var_t *out) const;
