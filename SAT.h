@@ -159,6 +159,7 @@ class DPLLSolver : public Solver {
   // clauses onto the unit stack.
   // nb: propagation terminates upon encountering any empty clause
   bool _unitPropagate(const Lit &lit, _SolverDelta *delta);
+  
   // assigns pure and does the propagation, updates delta
   void _pureAssign(const Lit &pure, _SolverDelta *delta);
 
@@ -166,6 +167,7 @@ class DPLLSolver : public Solver {
   // outputs a ptr to the literal in the clause through out and returns true, or returns false if none.
   // uses the unit stack first.
   bool _findUnit(Lit *out);
+
   // finds a pure literal in the current solver state and outputs through out and returns true,
   // or returns false if none
   bool _findPure(Lit *out);
