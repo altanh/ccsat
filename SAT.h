@@ -190,7 +190,7 @@ class DPLLSolver : public Solver {
   Model _model;
 
   // the variables in this instance
-  std::unordered_set<var_t> _vars;
+  std::vector<var_t> _vars;
 
   // the states of all clauses in the current instance
   // indexing of this mirrors _instance.clauses

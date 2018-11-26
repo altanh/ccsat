@@ -42,10 +42,23 @@ void DPLLSolver::_init(const CNF &cnf) {
   _assn_stack = {};
   _unit_stack = {};
 
-  // build _vars
+  // build _vars, order by # of occurrences in SAT instance
+  std::unordered_map<var_t, uint64_t> var_counts;
+  std::vector<std::pair<var_t, uint64_t>> sorted_vars;
   for (const auto &clause : _instance.clauses)
     for (const auto &lit : clause.lits)
-      _vars.insert(lit.var);
+      var_counts[lit.var]++;
+
+  for (const auto &vp : var_counts)
+    sorted_vars.push_back(vp);
+
+  std::sort(sorted_vars.begin(), sorted_vars.end(),
+      [](const auto &a, const auto &b) {
+        return a.second > b.second;
+      });
+
+  for (const auto &vp : sorted_vars)
+    _vars.push_back(vp.first);
 
   // build _clause_states
   for (size_t i = 0; i < _instance.clauses.size(); ++i) {
